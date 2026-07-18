@@ -1,0 +1,33 @@
+# ── Secrets & environment ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ── ProfitLens generated artifacts ──────────────────────────────────────
+# FAISS index + embedding cache — rebuilt from source files on demand
+rag_store/
+profitlens/scored.parquet
+
+# ── Large iteration/exploration outputs (regenerate via main/trial.py) ────
+preds/
+main/submission_v*.xlsx
+main/submission_combo.xlsx
+main/submission_c10_combo.xlsx
+
+# ── Editor / OS ──────────────────────────────────────────────────────────
+.vscode/
+.antigravity/
+.claude/
+.idea/
+.DS_Store
+*.log
