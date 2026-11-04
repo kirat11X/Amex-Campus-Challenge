@@ -1,17 +1,31 @@
-# Amex Campus Challenge 2026 — Round 1: ProfitLens
+# 🏆 Amex Campus Challenge 2026 — Campus Winner: ProfitLens
 
-[![Vercel Demo](https://img.shields.io/badge/Vercel-Demo%20Live-brightgreen?style=flat&logo=vercel)](https://vercel.com)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=flat&logo=docker)](Dockerfile)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
-[![Vite + React](https://img.shields.io/badge/Frontend-Vite%20%2B%20React-purple.svg)](web/)
+[![Campus Winner](https://img.shields.io/badge/Award-Campus%20Winner%20%F0%9F%8F%86-gold?style=for-the-badge)](README.md)
+[![Vercel Demo](https://img.shields.io/badge/Vercel-Demo%20Live-brightgreen?style=for-the-badge&logo=vercel)](https://vercel.com)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)](Dockerfile)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg?style=for-the-badge)](https://www.python.org/)
+[![Vite + React](https://img.shields.io/badge/Frontend-Vite%20%2B%20React-purple.svg?style=for-the-badge)](web/)
 
-Premier Card customer-profitability scoring engine and analytical chatbot developed for the **Amex Campus Challenge 2026 (Round 1)**.
-
-Includes **ProfitLens** — available both as a local **Streamlit + Ollama** app and as a **100% free, zero-config static web app ready to deploy to Vercel** (`web/`).
+> **🏆 Campus Winner Entry**: In the American Express Campus Challenge 2026 (Round 1), participants were given a raw dataset of 500,000 cardholders and tasked with deriving a customer profitability formula to identify the top 20% most valuable Premier Card accounts.
+>
+> While the baseline challenge prompt only asked for a scoring formula and a completed submission spreadsheet, **this winning entry went significantly beyond**: turning raw mathematical modeling into an **enterprise-grade, explainable AI analytics platform**. It introduces a transparent P&L economic framework, a local LLM-powered chatbot with deterministic tool calling, auto-rendered financial waterfall charts, local RAG document grounding, and a 100% free serverless web app ready to host on Vercel with zero setup.
 
 ---
 
-## 📸 Overview & Features
+## 🌟 Why This Solution Won: Going Beyond The Prompt
+
+| Challenge Requirement | Standard Baseline Approach | 🏆 Our Winning Solution (ProfitLens) |
+| :--- | :--- | :--- |
+| **Scoring Formula** | Generic regression or ungrounded formula | **10-Term Transparent P&L Economic Model**: Separates merchant discount interchange and net interest income from operational benefit costs, credit risk write-offs, and collections exclusions. Validated via single-lever response curves and ablation tests. |
+| **Deliverables** | Static submission spreadsheet | **Interactive Financial Intelligence Platform**: Streamlit desktop dashboard + 100% free client-side static web application (`web/`). |
+| **Explainability** | High-level summary text | **Conversational AI Financial Analyst**: Multi-turn local LLM (Ollama / Qwen3 / Gemini) function-calling chatbot that breaks down any customer's P&L dynamically without hallucinating figures. |
+| **Visual Analytics** | None / manual plotting | **Auto-Rendered P&L Waterfall Charts**: Dynamic horizontal waterfall visualizations showing green positive revenue drivers vs red cost drags, distribution histograms, and segment comparisons. |
+| **Knowledge Grounding** | Isolated script | **Local RAG (Retrieval-Augmented Generation)**: FAISS vector retrieval across challenge rules, methodology documents, and an interactive "Digest Your Own Files" tab for custom user documents (PDF/DOCX/XLSX). |
+| **Deployment & Scale** | Difficult to demo without local setup | **1-Click Free Hosting on Vercel (`web/`)**: Custom binary sharding (~230KB per lookup) and client-side execution, making the demo instantly shareable on Vercel with zero server costs. |
+
+---
+
+## 📸 Key Features & Capabilities
 
 ProfitLens provides an interactive chat interface over the scored 500,000-customer dataset:
 - **Instant Customer P&L Breakdowns**: Dynamic waterfall charts showing positive revenue (discount interchange, net interest) vs negative costs (airline credits, cab benefits, lounge, servicing, expected credit loss, collections).
@@ -44,7 +58,7 @@ The `web/` directory contains an instant, interactive client-side application co
 
 ---
 
-## 🧮 The Profitability Formula
+## 🧮 The Winning Profitability Formula
 
 The scoring weights are frozen in `main/trial.py` (`W` dict) and mirrored in `profitlens/config.py`:
 
@@ -58,7 +72,7 @@ profit = 0.024 × S_all + 0.331 × f1
 where S_all = f6 + f7 + f8 + f9 + f10
 ```
 
-### Term Breakdown
+### Term-by-Term Business Meaning
 | Term | Formula | Sign | Business Meaning |
 | :--- | :--- | :--- | :--- |
 | **rev_discount** | `0.0240 × S_all` | `+` | Merchant discount (Interchange) revenue on billed business (`f6+f7+f8+f9+f10`) |
@@ -72,7 +86,7 @@ where S_all = f6 + f7 + f8 + f9 + f10
 | **cost_collections** | `−8500 × f3` | `−` | Collections-driven cancellation penalty — soft exclusion |
 | **cost_servicing** | `−4.5 × f12` | `−` | Digital servicing cost per website login (`f12`) |
 
-**Top-20% Cutoff:** Customers with profit at or above the 80th percentile (**$2,012.86**). Mean profit of top-20% is **$4,354.85**.
+**Top-20% Cutoff:** Customers with profit at or above the 80th percentile (**$2,012.86**). Mean profit of top-20% is **$4,354.85** (vs. -$922.40 for bottom 80%).
 
 ---
 
