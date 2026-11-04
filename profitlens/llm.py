@@ -1,21 +1,21 @@
 """
-ProfitLens — Gemini LLM Integration
+ProfitLens — local LLM integration (Ollama)
 Loads PROFITLENS_CONTEXT.md verbatim as the system instruction.
-Function-calling loop, retry/backoff, and history trimming are unchanged.
+Function-calling loop and history trimming run against a local Ollama model.
 """
 from __future__ import annotations
-import functools, logging, time
-import streamlit as st
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, GEMINI_MODEL, CONTEXT_MD_PATH
+import functools, json, logging
+import requests
+from config import OLLAMA_HOST, LLM_MODEL, CONTEXT_MD_PATH
 from tools import TOOL_FUNCTIONS
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
 MAX_HISTORY_MESSAGES = 12
-RETRY_DELAYS = [2, 4, 8]
+NUM_CTX = 8192                # system context alone is ~5k tokens; keeps the model fully on a 6 GB GPU
+MAX_TOOL_RESULT_CHARS = 4000  # keep tool output inside the small model's window
+REQUEST_TIMEOUT = 600
 
 _FALLBACK_SYSTEM_PROMPT = (
     "You are ProfitLens, an issuer-side profitability analyst for the Amex Premier Card.\n"
@@ -59,84 +59,82 @@ def load_context(runtime_block: str = "") -> tuple[str, bool]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Gemini client
+#  Ollama client
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_client() -> genai.Client:
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY / API_KEY not set in .env")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def check_ollama() -> str | None:
+    """Return None if Ollama is up and LLM_MODEL is pulled, else an error message."""
+    try:
+        r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+        r.raise_for_status()
+    except requests.RequestException:
+        return f"Ollama is not reachable at {OLLAMA_HOST}. Start it with `ollama serve`."
+    names = {m["name"] for m in r.json().get("models", [])}
+    if LLM_MODEL not in names and f"{LLM_MODEL}:latest" not in names:
+        return f"Model `{LLM_MODEL}` is not installed. Run `ollama pull {LLM_MODEL}`."
+    return None
+
+
+def _fn(name: str, description: str, properties: dict | None = None,
+        required: list[str] | None = None) -> dict:
+    return {"type": "function", "function": {
+        "name": name, "description": description,
+        "parameters": {"type": "object", "properties": properties or {},
+                       "required": required or []}}}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Tool declarations (unchanged)
+#  Tool declarations
 # ═══════════════════════════════════════════════════════════════════════════
 
-_TOOL_DECLARATIONS = [
-    types.FunctionDeclaration(
-        name="get_customer_profile",
-        description="Get full profile for a customer: raw features, P&L terms, profit, rank, top-20% flag.",
-        parameters={"type": "OBJECT", "properties": {
-            "customer_id": {"type": "INTEGER", "description": "Customer ID"}
-        }, "required": ["customer_id"]}),
-    types.FunctionDeclaration(
-        name="get_top_customers",
-        description="Get top/bottom N customers by profit with key drivers.",
-        parameters={"type": "OBJECT", "properties": {
-            "n": {"type": "INTEGER", "description": "Count (max 50, default 10)"},
-            "ascending": {"type": "BOOLEAN", "description": "True for bottom N"}
-        }}),
-    types.FunctionDeclaration(
-        name="segment_compare",
-        description="Compare a feature between top-20% and rest: mean, median, p25, p75, missing%.",
-        parameters={"type": "OBJECT", "properties": {
-            "feature": {"type": "STRING", "description": "f1-f23 or term column name"}
-        }, "required": ["feature"]}),
-    types.FunctionDeclaration(
-        name="term_contribution_summary",
-        description="Aggregate mean of each P&L term for top-20% vs rest, showing biggest separators.",
-        parameters={"type": "OBJECT", "properties": {}}),
-    types.FunctionDeclaration(
-        name="get_distribution",
-        description="Histogram data for any column. App renders as plotly chart.",
-        parameters={"type": "OBJECT", "properties": {
-            "column": {"type": "STRING", "description": "Column name"},
-            "bins": {"type": "INTEGER", "description": "Bins (default 40)"},
-            "clip_percentiles": {"type": "ARRAY", "items": {"type": "NUMBER"},
-                                 "description": "[lo,hi] percentiles"},
-        }, "required": ["column"]}),
-    types.FunctionDeclaration(
-        name="query_segment",
-        description="Guarded pandas query with aggregation for ad-hoc questions.",
-        parameters={"type": "OBJECT", "properties": {
-            "filters": {"type": "STRING", "description": "pandas query expression"},
-            "agg": {"type": "STRING", "description": "count|mean_profit|sum_profit|top20_share"}
-        }, "required": ["filters", "agg"]}),
-    types.FunctionDeclaration(
-        name="explain_formula",
-        description="Return weights, equation, term table, and submission methodology.",
-        parameters={"type": "OBJECT", "properties": {}}),
-    types.FunctionDeclaration(
-        name="search_knowledge_base",
-        description=(
-            "Semantic search over the ProfitLens knowledge base: the project's own "
-            "code, methodology write-up, challenge deck, feature dictionary and "
-            "generated data profiles ('core'), plus any files the user uploaded "
-            "('user'). Returns text chunks with source and location for citation. "
-            "Not a source of customer-level numbers or live aggregates."),
-        parameters={"type": "OBJECT", "properties": {
-            "query": {"type": "STRING", "description": "Natural-language search query"},
-            "corpus": {"type": "STRING",
-                       "description": "core | user | both (default both)"},
-            "k": {"type": "INTEGER", "description": "Number of chunks (default 5, max 10)"},
-        }, "required": ["query"]}),
+TOOLS = [
+    _fn("get_customer_profile",
+        "Get full profile for a customer: raw features, P&L terms, profit, rank, top-20% flag.",
+        {"customer_id": {"type": "integer", "description": "Customer ID"}},
+        ["customer_id"]),
+    _fn("get_top_customers",
+        "Get top/bottom N customers by profit with key drivers.",
+        {"n": {"type": "integer", "description": "Count (max 50, default 10)"},
+         "ascending": {"type": "boolean", "description": "True for bottom N"}}),
+    _fn("segment_compare",
+        "Compare a feature between top-20% and rest: mean, median, p25, p75, missing%.",
+        {"feature": {"type": "string", "description": "f1-f23 or term column name"}},
+        ["feature"]),
+    _fn("term_contribution_summary",
+        "Aggregate mean of each P&L term for top-20% vs rest, showing biggest separators."),
+    _fn("get_distribution",
+        "Histogram data for any column. App renders as plotly chart.",
+        {"column": {"type": "string", "description": "Column name"},
+         "bins": {"type": "integer", "description": "Bins (default 40)"},
+         "clip_percentiles": {"type": "array", "items": {"type": "number"},
+                              "description": "[lo,hi] percentiles"}},
+        ["column"]),
+    _fn("query_segment",
+        "Guarded pandas query with aggregation for ad-hoc questions.",
+        {"filters": {"type": "string", "description": "pandas query expression"},
+         "agg": {"type": "string",
+                 "description": "count|mean_profit|sum_profit|top20_share"}},
+        ["filters", "agg"]),
+    _fn("explain_formula",
+        "Return weights, equation, term table, and submission methodology."),
+    _fn("search_knowledge_base",
+        "Semantic search over the ProfitLens knowledge base: the project's own "
+        "code, methodology write-up, challenge deck, feature dictionary and "
+        "generated data profiles ('core'), plus any files the user uploaded "
+        "('user'). Returns text chunks with source and location for citation. "
+        "Not a source of customer-level numbers or live aggregates.",
+        {"query": {"type": "string", "description": "Natural-language search query"},
+         "corpus": {"type": "string", "description": "core | user | both (default both)"},
+         "k": {"type": "integer", "description": "Number of chunks (default 5, max 10)"}},
+        ["query"]),
 ]
 
 # Appended to the system instruction at runtime — PROFITLENS_CONTEXT.md itself
 # is never edited.
 RAG_GUIDANCE = (
     "\n\n## KNOWLEDGE-BASE RETRIEVAL\n"
-    "Use search_knowledge_base for: questions about the code/implementation, the "
+    "You MUST call search_knowledge_base BEFORE answering — never say something "
+    "is unavailable without searching first — for: questions about the code/implementation, the "
     "methodology write-up, the challenge rules/deck, feature meanings, and ANY "
     "question about user-uploaded files. Do not use it for customer-level numbers "
     "or live aggregates — those come from the pandas tools. When you answer from "
@@ -148,111 +146,106 @@ RAG_GUIDANCE = (
     "source.\n"
 )
 
-GEMINI_TOOLS = [types.Tool(function_declarations=_TOOL_DECLARATIONS)]
-
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Tool execution (unchanged)
+#  Tool execution
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _execute_tool_calls(function_calls):
-    responses = []
-    for fc in function_calls:
-        fn = TOOL_FUNCTIONS.get(fc.name)
-        args = dict(fc.args) if fc.args else {}
-        if fn is None:
-            result = {"error": f"Unknown tool: {fc.name}"}
-        else:
-            try:
-                result = fn(**args)
-            except Exception as e:
-                result = {"error": str(e)}
-        responses.append(types.Part.from_function_response(name=fc.name, response=result))
-    return responses
+def _execute_tool_call(name: str, args: dict) -> str:
+    fn = TOOL_FUNCTIONS.get(name)
+    if fn is None:
+        result = {"error": f"Unknown tool: {name}"}
+    else:
+        try:
+            result = fn(**args)
+        except Exception as e:
+            result = {"error": str(e)}
+    text = json.dumps(result, default=str)
+    if len(text) > MAX_TOOL_RESULT_CHARS:
+        text = text[:MAX_TOOL_RESULT_CHARS] + '... [truncated]"}'
+    return text
+
+
+def _prefetch_context(query: str, k: int = 4) -> str:
+    """Always-on retrieval for tool mode. A 4B model won't reliably choose to call
+    search_knowledge_base, so the top chunks are injected up front."""
+    try:
+        hits = TOOL_FUNCTIONS["search_knowledge_base"](query, "both", k).get("results", [])
+    except Exception as e:
+        logger.warning("Prefetch retrieval failed: %s", e)
+        return ""
+    if not hits:
+        return ""
+    blocks = [f"[{h['source']} — {h['location']}]\n{h['text'][:1200]}" for h in hits]
+    return ("\n\n---\nRetrieved knowledge-base excerpts (cite source + location "
+            "when you use them):\n\n" + "\n\n".join(blocks))
+
+
+def _chat(messages: list[dict], tools: list[dict] | None) -> dict:
+    payload = {
+        "model": LLM_MODEL, "messages": messages, "stream": False,
+        "options": {"temperature": 0.2, "num_ctx": NUM_CTX},
+    }
+    if tools:
+        payload["tools"] = tools
+    try:
+        resp = requests.post(f"{OLLAMA_HOST}/api/chat", json=payload,
+                             timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Ollama request failed: {e}") from e
+    return resp.json()["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Main chat function (runtime_block replaces stats_pack)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def chat_with_gemini(user_message: str, history: list[dict], runtime_block: str = "",
-                      free_tier: bool = True) -> tuple[str, list[dict], list[str]]:
+def chat_with_llm(user_message: str, history: list[dict], runtime_block: str = "",
+                  use_tools: bool = True) -> tuple[str, list[dict], list[str]]:
     """
-    Send user message through Gemini.
+    Send user message through the local Ollama model.
 
     Args:
         user_message:  The new user message.
         history:       List of {"role": "user"|"model", "text": str} dicts.
         runtime_block: Pre-built runtime verification text appended to system instruction.
-        free_tier:     If True, skip the tool-calling loop entirely and make a single
-                        direct generate_content call (1 request/message, safe for the
-                        20-req/day free tier). If False, run the full multi-round
-                        function-calling pipeline (up to MAX_TOOL_ROUNDS requests/message).
+        use_tools:     If True, run the multi-round function-calling pipeline (pandas
+                       tools + knowledge-base retrieval, up to MAX_TOOL_ROUNDS model
+                       calls). If False, answer directly from the system context.
 
     Returns:
         (assistant_reply_text, updated_history, tool_names_called)
     """
-    client = get_client()
     system_instruction, _ = load_context(runtime_block)
 
-    contents = []
-    trimmed = history[-MAX_HISTORY_MESSAGES:]
-    for msg in trimmed:
-        contents.append(types.Content(role=msg["role"],
-                                      parts=[types.Part.from_text(text=msg["text"])]))
-    contents.append(types.Content(role="user",
-                                  parts=[types.Part.from_text(text=user_message)]))
+    messages = [{"role": "system", "content": system_instruction}]
+    for msg in history[-MAX_HISTORY_MESSAGES:]:
+        messages.append({"role": "assistant" if msg["role"] == "model" else "user",
+                         "content": msg["text"]})
+    extra = _prefetch_context(user_message) if use_tools else ""
+    messages.append({"role": "user", "content": user_message + extra})
 
-    if free_tier:
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.2,
-        )
-        max_rounds = 1
-    else:
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=GEMINI_TOOLS,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            temperature=0.2,
-        )
-        max_rounds = MAX_TOOL_ROUNDS
+    tools = TOOLS if use_tools else None
+    tool_names_called: list[str] = []
+    text = None
 
-    tool_names_called = []
-    response = None
-
-    for _ in range(max_rounds):
-        for delay in RETRY_DELAYS + [None]:
-            try:
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL, contents=contents, config=config)
-                break
-            except Exception as e:
-                err = str(e).lower()
-                if ("429" in err or "rate" in err or "resource" in err) and delay:
-                    st.toast(f"⏳ Rate limit, retrying in {delay}s…")
-                    time.sleep(delay)
-                else:
-                    raise
-
-        if response is None:
+    for _ in range(MAX_TOOL_ROUNDS if use_tools else 1):
+        reply = _chat(messages, tools)
+        calls = reply.get("tool_calls") or []
+        if not calls:
+            text = (reply.get("content") or "").strip() or "(No response)"
             break
+        messages.append(reply)
+        for call in calls:
+            name = call["function"]["name"]
+            args = call["function"].get("arguments") or {}
+            tool_names_called.append(name)
+            messages.append({"role": "tool", "tool_name": name,
+                             "content": _execute_tool_call(name, args)})
 
-        fc_list = response.function_calls
-        if fc_list:
-            for fc in fc_list:
-                tool_names_called.append(fc.name)
-            contents.append(response.candidates[0].content)
-            fn_responses = _execute_tool_calls(fc_list)
-            contents.append(types.Content(role="user", parts=fn_responses))
-        else:
-            text = response.text or "(No response)"
-            new_hist = history + [{"role": "user", "text": user_message},
-                                   {"role": "model", "text": text}]
-            return text, new_hist, tool_names_called
-
-    text = (response.text if response and response.text
-            else "Ran out of tool rounds. Try a more specific question.")
+    if text is None:
+        text = "Ran out of tool rounds. Try a more specific question."
     new_hist = history + [{"role": "user", "text": user_message},
-                           {"role": "model", "text": text}]
+                          {"role": "model", "text": text}]
     return text, new_hist, tool_names_called

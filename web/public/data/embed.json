@@ -1,0 +1,10 @@
+{
+ "model": "Xenova/bge-small-en-v1.5",
+ "dtype": "q8",
+ "pooling": "cls",
+ "query_prefix": "Represent this sentence for searching relevant passages: ",
+ "sim_floor": 0.58,
+ "dim": 384,
+ "count": 125,
+ "chunks_sha1": "1ee45271f4e774f4f9dc807c89b2e45dbf057560"
+}

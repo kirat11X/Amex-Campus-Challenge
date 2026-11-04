@@ -1,10 +1,11 @@
 """
-ProfitLens — Tool Functions for Gemini Function Calling
+ProfitLens — Tool Functions for local LLM function calling
 Each function returns a JSON-serializable dict.
 Bad input is handled gracefully (returns {"error": ..., "hint": ...}).
 """
 from __future__ import annotations
 
+import ast
 import re
 import json
 import numpy as np
@@ -205,7 +206,36 @@ def get_distribution(column: str, bins: int = 40, clip_percentiles: list = None)
 #  6. query_segment
 # ═══════════════════════════════════════════════════════════════════════════
 
-_UNSAFE_PATTERNS = re.compile(r"(@|__|\bimport\b|\bexec\b|\beval\b|\bos\b|\bsys\b)")
+# DataFrame.query can call methods on columns (e.g. `profit.to_csv(...)`), so a deny-list of words
+# isn't enough: the filter is parsed and only plain column/number expressions are let through.
+_ALLOWED_NODES = (
+    ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.UnaryOp, ast.Not, ast.USub, ast.UAdd, ast.Invert,
+    ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.BitAnd, ast.BitOr,
+    ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn,
+    ast.List, ast.Tuple, ast.Load,
+)
+_MAX_FILTER_CHARS = 300
+
+
+def _check_filter(filters: str) -> str | None:
+    """None if `filters` is a safe column expression, else the reason it was rejected."""
+    if len(filters) > _MAX_FILTER_CHARS:
+        return f"Filter is longer than {_MAX_FILTER_CHARS} characters."
+    try:
+        tree = ast.parse(filters.strip(), mode="eval")
+    except SyntaxError:
+        return "Filter is not a valid expression."
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            if node.id not in VALID_COLUMNS:
+                return f"Unknown column '{node.id}'."
+        elif isinstance(node, ast.Constant):
+            if isinstance(node.value, (str, bytes)) or node.value is None or node.value is Ellipsis:
+                return "Only numeric values are allowed."
+        elif not isinstance(node, _ALLOWED_NODES):
+            return f"'{type(node).__name__}' is not allowed (no calls, attributes or indexing)."
+    return None
+
 
 def query_segment(filters: str, agg: str) -> dict:
     """Guarded pandas query over feature/term columns.
@@ -216,10 +246,10 @@ def query_segment(filters: str, agg: str) -> dict:
     valid_aggs = {"count", "mean_profit", "sum_profit", "top20_share"}
     if agg not in valid_aggs:
         return {"error": f"Invalid agg '{agg}'.", "hint": f"Choose from {valid_aggs}"}
-    # Security: reject unsafe patterns
-    if _UNSAFE_PATTERNS.search(filters):
-        return {"error": "Unsafe query pattern detected.", "hint": "Only use column comparisons, e.g. 'f3 >= 1 and profit > 0'."}
-    # Whitelist: only allow references to known columns
+    reason = _check_filter(filters)
+    if reason:
+        return {"error": f"Unsafe or invalid filter: {reason}",
+                "hint": "Only use column comparisons, e.g. 'f3 >= 1 and profit > 0'. Columns: " + ", ".join(VALID_COLUMNS)}
     try:
         subset = _df.query(filters)
     except Exception as e:
@@ -334,7 +364,7 @@ def search_knowledge_base(query: str, corpus: str = "both", k: int = 5) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Tool registry (for Gemini)
+#  Tool registry (for the local LLM)
 # ═══════════════════════════════════════════════════════════════════════════
 
 TOOL_FUNCTIONS = {

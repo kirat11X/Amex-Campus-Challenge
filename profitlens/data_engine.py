@@ -107,7 +107,7 @@ def verify_against_submission(df: pd.DataFrame) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Stats pack (compact, for Gemini system prompt — <1,500 tokens)
+#  Stats pack (compact, for the LLM system prompt — <1,500 tokens)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def build_stats_pack(df: pd.DataFrame) -> dict:

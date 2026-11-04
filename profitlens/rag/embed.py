@@ -1,31 +1,28 @@
 """
-ProfitLens RAG — Gemini embeddings.
+ProfitLens RAG — local embeddings via Ollama.
 
-Same google-genai SDK and same GEMINI_API_KEY as the chat loop.
-Batched (100/request), 429 exponential backoff, sqlite content-hash cache
-so re-ingestion and index rebuilds never re-pay embedding calls.
+Batched requests to Ollama's /api/embed, with a sqlite content-hash cache
+so re-ingestion and index rebuilds never re-embed unchanged text.
 All vectors are L2-normalized before they leave this module.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import re
 import sqlite3
 import time
 
 import numpy as np
-from google.genai import types
+import requests
 
-from config import GEMINI_EMBED_MODEL, EMBED_DIM, RAG_STORE_DIR
+from config import OLLAMA_HOST, EMBED_MODEL, EMBED_DIM, RAG_STORE_DIR
 
 logger = logging.getLogger(__name__)
 
-# The free tier meters embed_content per *content*, not per request, at 100/min —
-# so batches stay under that and the ingest loop paces itself between batches.
-BATCH_SIZE = 50
-RETRY_DELAYS = [2, 4, 8, 16, 32]
-INTER_BATCH_PAUSE = 1.0
+BATCH_SIZE = 32
+RETRY_DELAYS = [1, 2, 4]
+# nomic-embed-text expects a task prefix on every input.
+_PREFIX = {"RETRIEVAL_DOCUMENT": "search_document: ", "RETRIEVAL_QUERY": "search_query: "}
 _CACHE_PATH = RAG_STORE_DIR / "emb_cache.sqlite"
 
 _cache_hits = 0
@@ -44,7 +41,7 @@ def _conn() -> sqlite3.Connection:
 
 
 def _key(text: str, task_type: str) -> str:
-    payload = f"{GEMINI_EMBED_MODEL}|{EMBED_DIM}|{task_type}|{text}"
+    payload = f"{EMBED_MODEL}|{EMBED_DIM}|{task_type}|{text}"
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
@@ -63,28 +60,22 @@ def _normalize(mat: np.ndarray) -> np.ndarray:
 
 
 def _call_api(texts: list[str], task_type: str) -> list[list[float]]:
-    """Embed a single batch, retrying on rate limits."""
-    from llm import get_client  # imported lazily: shares the chat client factory
-
-    client = get_client()
-    config = types.EmbedContentConfig(
-        task_type=task_type, output_dimensionality=EMBED_DIM)
+    """Embed a single batch via Ollama, retrying transient failures."""
+    prefix = _PREFIX.get(task_type, "")
+    payload = {"model": EMBED_MODEL, "input": [prefix + t for t in texts],
+               "truncate": True}
     for delay in RETRY_DELAYS + [None]:
         try:
-            resp = client.models.embed_content(
-                model=GEMINI_EMBED_MODEL, contents=texts, config=config)
-            return [list(e.values) for e in resp.embeddings]
-        except Exception as e:
-            err = str(e).lower()
-            if delay and ("429" in err or "rate" in err or "resource" in err
-                          or "unavailable" in err or "503" in err):
-                # Honour the server's own retryDelay when it sends one.
-                m = re.search(r"retry in ([\d.]+)s", err)
-                wait = max(delay, float(m.group(1)) + 1 if m else 0)
-                logger.warning("Embedding rate-limited; retrying in %.0fs", wait)
-                time.sleep(wait)
-            else:
-                raise
+            resp = requests.post(f"{OLLAMA_HOST}/api/embed", json=payload, timeout=300)
+            resp.raise_for_status()
+            return resp.json()["embeddings"]
+        except requests.RequestException as e:
+            if delay is None:
+                raise RuntimeError(
+                    f"Ollama embedding failed ({e}). Is Ollama running and "
+                    f"`ollama pull {EMBED_MODEL}` done?") from e
+            logger.warning("Embedding request failed; retrying in %ss", delay)
+            time.sleep(delay)
     raise RuntimeError("unreachable")
 
 
@@ -109,8 +100,6 @@ def embed_texts(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> np.n
         _cache_misses += len(todo)
 
         for start in range(0, len(todo), BATCH_SIZE):
-            if start:
-                time.sleep(INTER_BATCH_PAUSE)
             idxs = todo[start:start + BATCH_SIZE]
             vecs = _call_api([texts[i] for i in idxs], task_type)
             for i, vec in zip(idxs, vecs):

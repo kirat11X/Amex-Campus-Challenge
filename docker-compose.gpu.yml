@@ -1,0 +1,10 @@
+# Override: give the Ollama container the NVIDIA GPU (needs nvidia-container-toolkit).
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -1,6 +1,6 @@
 """
 ProfitLens — Streamlit Chat UI
-Premier Card Profitability Chatbot powered by Gemini.
+Premier Card Profitability Chatbot powered by a local LLM (Ollama).
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -10,11 +10,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, TERM_COLUMNS, TERM_MEANINGS
+from config import LLM_MODEL, TERM_COLUMNS, TERM_MEANINGS
 from data_engine import load_scored, verify_against_submission, build_stats_pack, compute_runtime_verification
 from tools import (init_tools, get_customer_profile, get_distribution,
                    term_contribution_summary, set_user_corpus_enabled)
-from llm import chat_with_gemini, load_context
+from llm import chat_with_llm, check_ollama, load_context
 from rag.ingest import (SUPPORTED_EXTS, build_core, clear_user_corpus,
                         delete_user_file, ingest_user_file, list_user_files,
                         user_store)
@@ -112,10 +112,11 @@ if data_loaded:
 # ═══════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## 💳 ProfitLens")
-    st.caption(f"Model: `{GEMINI_MODEL}`")
+    st.caption(f"Model: `{LLM_MODEL}` (local, via Ollama)")
 
-    if not GEMINI_API_KEY:
-        st.error("⚠️ **API key missing!**\n\nAdd `GEMINI_API_KEY=...` or `API_KEY=...` to your `.env` file in the project root.")
+    _ollama_err = check_ollama()
+    if _ollama_err:
+        st.error(f"⚠️ **Local model unavailable**\n\n{_ollama_err}")
 
     # xlsx integrity badge
     if verification:
@@ -154,16 +155,14 @@ with st.sidebar:
     )
     set_user_corpus_enabled(include_user)
 
-    free_tier_mode = st.toggle(
-        "🆓 Free tier mode",
-        value=st.session_state.get("free_tier_mode", True),
-        help="On: 1 direct model call per message, no tool-calling loop or knowledge-base "
-             "retrieval — stays within Gemini's free-tier daily quota, but answers aren't "
-             "grounded in live tool data and charts won't render. Off: full pipeline "
-             "(multi-round tool calls + retrieval) for grounded, accurate answers, but "
-             "uses more requests per message.",
+    use_tools = st.toggle(
+        "🛠 Tools & retrieval",
+        value=st.session_state.get("use_tools", True),
+        help="On: multi-round tool calls over the live data plus knowledge-base retrieval, "
+             "for grounded answers and auto-rendered charts (slower on a small local model). "
+             "Off: one direct model call per message from the system context only.",
     )
-    st.session_state["free_tier_mode"] = free_tier_mode
+    st.session_state["use_tools"] = use_tools
 
     # Dataset stats
     if stats_pack:
@@ -205,7 +204,7 @@ with st.sidebar:
 #  Title
 # ═══════════════════════════════════════════════════════════════════════════
 st.markdown("# ProfitLens")
-st.caption("Premier Card Profitability Chatbot — powered by Gemini")
+st.caption("Premier Card Profitability Chatbot — powered by a local LLM (Ollama)")
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Session state
@@ -343,9 +342,9 @@ with tab_chat:
             with st.spinner("Thinking…"):
                 try:
                     _runtime_block = ctx_verification["block"] if ctx_verification else ""
-                    reply, new_history, tools_used = chat_with_gemini(
+                    reply, new_history, tools_used = chat_with_llm(
                         user_input, st.session_state["history"], _runtime_block,
-                        free_tier=st.session_state.get("free_tier_mode", True),
+                        use_tools=st.session_state.get("use_tools", True),
                     )
                     st.session_state["history"] = new_history
                     st.markdown(reply)

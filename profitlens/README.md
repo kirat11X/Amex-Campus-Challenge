@@ -1,48 +1,41 @@
 # ProfitLens — Premier Card Profitability Chatbot
 
-An AI-powered chatbot that analyzes credit-card customer profitability for the Amex Campus Challenge 2026 dataset. Built with **Streamlit** + **Google Gemini** (free tier) + **pandas**.
+An AI-powered chatbot that analyzes credit-card customer profitability for the Amex Campus Challenge 2026 dataset. Built with **Streamlit** + a local **Ollama** model + **pandas**.
 
-All numbers come from deterministic pandas computation — Gemini only calls tools and explains results, never guesses values.
+All numbers come from deterministic pandas computation — the LLM only calls tools and explains results, never guesses values.
 
 ## Setup
 
 ```bash
-# 1. Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+ollama pull qwen3:4b-instruct-2507-q4_K_M   # chat + tool calling (~2.5 GB)
+ollama pull nomic-embed-text                 # RAG embeddings
 
-# 2. Install dependencies
+python -m venv .venv
+source .venv/bin/activate
 pip install -r profitlens/requirements.txt
 
-# 3. Ensure your .env is in the project root with:
-#    GEMINI_API_KEY=your-api-key-here
-#    GEMINI_MODEL=gemini-2.0-flash  (optional, defaults to gemini-2.0-flash)
-
-# 4. Ensure data files are in the project root:
+# Data files must be in the project root:
 #    - 6a3eb196bc7a3_campus_challenge_r1_data.csv
 #    - 6a3eb1af6b994_feature_description.csv
 #    - submission_FINAL.xlsx
 
-# 5. Run the app
-cd profitlens
-streamlit run app.py
+cd profitlens && streamlit run app.py
 ```
 
-## Free Tier Mode
+`OLLAMA_HOST`, `LLM_MODEL` and `EMBED_MODEL` can be overridden via environment or `.env`.
+The first launch embeds the knowledge base (~125 chunks, under a minute); it is cached afterwards.
 
-The Gemini free tier caps requests at ~20/day per model, and each chat message can otherwise
-cost up to `MAX_TOOL_ROUNDS` (6) requests via the function-calling loop. The sidebar toggle
-**"🆓 Free tier mode"** (on by default) trades that off:
+## Tools & retrieval toggle
 
-| | Free tier mode **ON** (default) | Free tier mode **OFF** |
+| | **ON** (default) | **OFF** |
 |---|---|---|
-| Requests per message | 1 (single direct call) | up to 6 (multi-round tool-calling loop) |
-| Tools / RAG retrieval | Skipped | Full pandas tool + `search_knowledge_base` access |
-| Grounding | System-instruction context only | Live tool results, cited RAG chunks |
-| Auto-rendered charts | None (no tools called) | Waterfall / histogram / term-comparison charts |
+| Model calls per message | up to 6 (tool-calling loop) | 1 |
+| Tools / RAG retrieval | pandas tools + top knowledge-base chunks injected on every message | Skipped |
+| Grounding | Live tool results, cited RAG chunks | System-instruction context only |
+| Auto-rendered charts | Waterfall / histogram / term-comparison | None |
 
-Flip it off if you're on paid Gemini quota and want fully grounded, tool-backed answers.
+A 4B model is good at tool-grounded numbers (customer breakdowns, counts) but can misquote
+line numbers or fine print from retrieved code — verify code citations against the source.
 
 ## Sample Questions
 
@@ -64,8 +57,8 @@ Flip it off if you're on paid Gemini quota and want fully grounded, tool-backed 
 |---|---|
 | `config.py` | Weights (W dict), file paths, feature dictionary, model name |
 | `data_engine.py` | Load CSV, score, cache to parquet, verify against submission |
-| `tools.py` | 7 pandas tool functions for Gemini function calling |
-| `llm.py` | Gemini client, system prompt, multi-turn function-calling loop |
+| `tools.py` | 7 pandas tool functions for LLM function calling |
+| `llm.py` | Ollama client, system prompt, multi-turn function-calling loop |
 | `app.py` | Streamlit chat UI with plotly charts |
 
 ## Profitability Formula
@@ -95,7 +88,7 @@ Top-20% flag: customers whose profit ranks in the 80th percentile or above.
 
 ### How it works
 
-The file is loaded **verbatim** (no summarization or truncation) as the `system_instruction` in every Gemini API call. It is cached in memory after the first read and never re-injected into chat history.
+The file is loaded **verbatim** (no summarization or truncation) as the `system_instruction` in every model call. It is cached in memory after the first read and never re-injected into chat history.
 
 **Trust hierarchy:**
 ```
@@ -120,7 +113,7 @@ The script prints the updated Section 8 block and the new `EXPECTED` dict for `c
 
 ## Knowledge Base (RAG)
 
-ProfitLens has a local retrieval layer built on Gemini embeddings + FAISS. It is
+ProfitLens has a local retrieval layer built on local Ollama embeddings + FAISS. It is
 exposed to the model as **one more tool** in the existing function-calling loop
 (`search_knowledge_base`) — there is no separate RAG chain, chat, or model client.
 
@@ -175,10 +168,11 @@ rm -rf rag_store/          # drops the embedding cache too
 rm rag_store/hashes.json
 ```
 
-Embeddings use `gemini-embedding-001` (768-d, L2-normalized) via the same
-`GEMINI_API_KEY`. Override with `GEMINI_EMBED_MODEL` / `GEMINI_EMBED_DIM` in
-`.env`. Every vector is cached by content hash in `rag_store/emb_cache.sqlite`,
-so rebuilds and re-ingestion never re-pay for embedding calls.
+Embeddings use `nomic-embed-text` (768-d, L2-normalized) served by local Ollama.
+Override with `EMBED_MODEL` / `EMBED_DIM` in `.env` — and delete `rag_store/` after
+changing the embedding model, since vectors from different models aren't comparable.
+Every vector is cached by content hash in `rag_store/emb_cache.sqlite`,
+so rebuilds and re-ingestion never re-embed unchanged text.
 
 ### Architecture (updated)
 
@@ -186,12 +180,12 @@ so rebuilds and re-ingestion never re-pay for embedding calls.
 |---|---|
 | `config.py` | Weights (W dict), file paths, feature dictionary, model name, **EXPECTED Section-8 values**, **embedding + RAG settings** |
 | `data_engine.py` | Load CSV, score, cache to parquet, verify against submission, **runtime verification** |
-| `tools.py` | 8 tool functions for Gemini function calling (7 pandas + **`search_knowledge_base`**) |
-| `llm.py` | Context loader (verbatim), Gemini client, function-calling loop, **RAG guidance block** |
+| `tools.py` | 8 tool functions for LLM function calling (7 pandas + **`search_knowledge_base`**) |
+| `llm.py` | Context loader (verbatim), Ollama client, function-calling loop, **RAG guidance block** |
 | `app.py` | Streamlit UI: **💬 Chat** and **📂 Digest your own files?** tabs, plotly charts, sidebar badges |
 | `rag/chunker.py` | Hand-rolled chunkers: prose, markdown-by-header, statement-aware Python |
 | `rag/profile_docs.py` | Dataset / formula-output / uploaded-table profile documents |
-| `rag/embed.py` | Gemini embeddings — batching, 429 backoff, sqlite content-hash cache |
+| `rag/embed.py` | Ollama embeddings — batching, retry, sqlite content-hash cache |
 | `rag/store.py` | FAISS `IndexFlatIP` wrapper: add / search / delete-by-file / save / load |
 | `rag/ingest.py` | Core-corpus build with hash caching; user upload, delete, clear |
 | `PROFITLENS_CONTEXT.md` | Master grounding file — system instruction source of truth |

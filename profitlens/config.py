@@ -11,14 +11,14 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
 
-GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY", "")
-GEMINI_MODEL: str = os.getenv("GEMINI_MODEL") or os.getenv("MODEL", "gemini-2.0-flash")
+# Local inference via Ollama (no API key, nothing leaves the laptop).
+OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 
-# Embedding model for the RAG layer (same SDK, same API key).
-# NOTE: text-embedding-004 was retired — the current free-tier model is
-# gemini-embedding-001, which supports a truncated output_dimensionality.
-GEMINI_EMBED_MODEL: str = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001")
-EMBED_DIM: int = int(os.getenv("GEMINI_EMBED_DIM", "768"))
+# Embedding model for the RAG layer, also served by Ollama.
+# nomic-embed-text produces 768-dim vectors.
+EMBED_MODEL: str = os.getenv("EMBED_MODEL", "nomic-embed-text")
+EMBED_DIM: int = int(os.getenv("EMBED_DIM", "768"))
 
 # ── Data file paths (relative to the repo root) ─────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +34,7 @@ CHALLENGE_PDF = ROOT_DIR / "6a3ea743b1106_campus_challenge26_r1.pdf"
 
 # ── RAG store (gitignored, rebuilt from sources on demand) ───────────────
 RAG_STORE_DIR = ROOT_DIR / "rag_store"
-RAG_SIM_FLOOR = 0.5          # cosine floor below which a hit is "not relevant"
+RAG_SIM_FLOOR = 0.58         # cosine floor (nomic-embed-text) below which a hit is "not relevant"
 RAG_MAX_UPLOAD_MB = 25
 
 # ── Master weights (frozen — do NOT modify) ──────────────────────────────

@@ -1,0 +1,38 @@
+# ProfitLens + a local Ollama. First start pulls the models (~3 GB), so give it a few minutes.
+#   docker compose up --build                                         # CPU
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build   # NVIDIA GPU
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      retries: 30
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama: {condition: service_healthy}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M} && ollama pull ${EMBED_MODEL:-nomic-embed-text}"]
+    restart: "no"
+
+  app:
+    build: .
+    depends_on:
+      ollama-pull: {condition: service_completed_successfully}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
+      EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
+    ports:
+      - "8501:8501"
+    volumes:
+      - rag_store:/app/rag_store
+
+volumes:
+  ollama:
+  rag_store:

@@ -1,0 +1,39 @@
+{
+  "name": "profitlens-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
+    "@mlc-ai/web-llm": "^0.2.86",
+    "dompurify": "^3.4.17",
+    "mammoth": "^1.13.0",
+    "marked": "^18.1.2",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "read-excel-file": "^9.3.14"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright-core": "^1.64.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "description": "ProfitLens in the browser: static site, LLM + embeddings run on the visitor's device (WebGPU), no server.",
+  "scripts": {
+    "dev": "vite --port 5189",
+    "prebuild": "node scripts/copy-ort.mjs",
+    "predev": "node scripts/copy-ort.mjs",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5190",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "export-data": "../.venv/bin/python scripts/export_data.py",
+    "embed-core": "node scripts/embed_core.mjs"
+  }
+}

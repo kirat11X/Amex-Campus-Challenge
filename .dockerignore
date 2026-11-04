@@ -1,0 +1,10 @@
+.git
+.env
+.venv
+.claude
+__pycache__
+rag_store
+rag_store.gemini_bak
+preds
+web/node_modules
+web/dist
