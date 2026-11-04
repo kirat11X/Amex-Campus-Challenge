@@ -1,6 +1,6 @@
-# ProfitLens — in the browser
+# ProfitLens — in the browser (Overall Campus Winner Web App)
 
-The ProfitLens chatbot (Amex Campus Challenge 2026, Premier Card profitability) as a **static web app**:
+The ProfitLens chatbot (Amex Campus Challenge 2026 **Overall Campus Winner**, Premier Card profitability) as a **static web app**:
 the language model, the embeddings and all eight tools run on the visitor's device. No server, no API key,
 free to host (see [HOSTING.md](HOSTING.md)). The Streamlit + Ollama app in `../profitlens` is untouched.
 

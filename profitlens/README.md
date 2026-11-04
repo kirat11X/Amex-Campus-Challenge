@@ -1,7 +1,7 @@
-# 🏆 ProfitLens — Premier Card Profitability Chatbot (Campus Winner Entry)
+# 🏆 ProfitLens — Premier Card Profitability Chatbot (Overall Campus Winner)
 
-> **Amex Campus Challenge 2026 (Round 1) — Winning Submission**
-> The original challenge prompt asked participants to analyze 500,000 cardholders and formulate a profitability equation to identify the top 20%. **ProfitLens went far beyond the baseline prompt**: pairing the transparent mathematical model with a full conversational AI analyst, dynamic P&L waterfall visualizer, local RAG layer, Docker support, and a zero-server web app for Vercel.
+> **Amex Campus Challenge 2026 — Overall Campus Winner Submission**
+> The original challenge prompt asked participants to analyze 500,000 cardholders and formulate a profitability equation to identify the top 20%. **ProfitLens won Overall Campus Winner by going far beyond the baseline prompt**: pairing the transparent mathematical model with a full conversational AI analyst, dynamic P&L waterfall visualizer, local RAG layer, Docker support, and a zero-server web app for Vercel.
 
 An AI-powered chatbot that analyzes credit-card customer profitability for the Amex Campus Challenge 2026 dataset. Built with **Streamlit** + a local **Ollama** model + **pandas**.
 

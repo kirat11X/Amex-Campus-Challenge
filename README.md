@@ -1,14 +1,16 @@
-# 🏆 Amex Campus Challenge 2026 — Campus Winner: ProfitLens
+# 🏆 Amex Campus Challenge 2026 — Overall Campus Winner: ProfitLens
 
-[![Campus Winner](https://img.shields.io/badge/Award-Campus%20Winner%20%F0%9F%8F%86-gold?style=for-the-badge)](README.md)
+[![Overall Campus Winner](https://img.shields.io/badge/Award-OVERALL%20CAMPUS%20WINNER%20%F0%9F%8F%86-gold?style=for-the-badge)](README.md)
 [![Vercel Demo](https://img.shields.io/badge/Vercel-Demo%20Live-brightgreen?style=for-the-badge&logo=vercel)](https://vercel.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)](Dockerfile)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg?style=for-the-badge)](https://www.python.org/)
 [![Vite + React](https://img.shields.io/badge/Frontend-Vite%20%2B%20React-purple.svg?style=for-the-badge)](web/)
 
-> **🏆 Campus Winner Entry**: In the American Express Campus Challenge 2026 (Round 1), participants were given a raw dataset of 500,000 cardholders and tasked with deriving a customer profitability formula to identify the top 20% most valuable Premier Card accounts.
+> **🏆 OVERALL CAMPUS WINNER**: Official winning submission for the American Express Campus Challenge 2026.
 >
-> While the baseline challenge prompt only asked for a scoring formula and a completed submission spreadsheet, **this winning entry went significantly beyond**: turning raw mathematical modeling into an **enterprise-grade, explainable AI analytics platform**. It introduces a transparent P&L economic framework, a local LLM-powered chatbot with deterministic tool calling, auto-rendered financial waterfall charts, local RAG document grounding, and a 100% free serverless web app ready to host on Vercel with zero setup.
+> The challenge provided raw cardholder features (500,000 customers across 23 anonymized attributes) and tasked teams with formulating a profitability equation to identify the top 20% most valuable accounts.
+>
+> While the baseline brief only asked for an equation and a scored submission sheet, **this project won the Overall Campus Winner title by engineering an enterprise-grade AI analytics ecosystem**: pairing a mathematically rigorous, deterministic 10-term P&L model with a local LLM-powered financial analyst chatbot, automated P&L waterfall visualizations, local RAG document grounding, containerized microservices, and a 100% free serverless web app deployed to Vercel.
 
 ---
 
