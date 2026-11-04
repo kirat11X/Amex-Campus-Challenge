@@ -1,16 +1,36 @@
 # 🏆 Amex Campus Challenge 2026 — Overall Campus Winner: ProfitLens
 
 [![Overall Campus Winner](https://img.shields.io/badge/Award-OVERALL%20CAMPUS%20WINNER%20%F0%9F%8F%86-gold?style=for-the-badge)](README.md)
-[![Vercel Demo](https://img.shields.io/badge/Vercel-Demo%20Live-brightgreen?style=for-the-badge&logo=vercel)](https://vercel.com)
+[![Vercel Demo](https://img.shields.io/badge/Vercel-Demo%20Live-brightgreen?style=for-the-badge&logo=vercel)](https://profitlens-amexcampuschallenge2026.vercel.app)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)](Dockerfile)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg?style=for-the-badge)](https://www.python.org/)
 [![Vite + React](https://img.shields.io/badge/Frontend-Vite%20%2B%20React-purple.svg?style=for-the-badge)](web/)
 
-> **🏆 OVERALL CAMPUS WINNER**: Official winning submission for the American Express Campus Challenge 2026.
+> **🏆 OVERALL CAMPUS WINNER**: Official winning submission for the American Express Campus Challenge 2026 (PEC • Product Track).
 >
 > The challenge provided raw cardholder features (500,000 customers across 23 anonymized attributes) and tasked teams with formulating a profitability equation to identify the top 20% most valuable accounts.
 >
 > While the baseline brief only asked for an equation and a scored submission sheet, **this project won the Overall Campus Winner title by engineering an enterprise-grade AI analytics ecosystem**: pairing a mathematically rigorous, deterministic 10-term P&L model with a local LLM-powered financial analyst chatbot, automated P&L waterfall visualizations, local RAG document grounding, containerized microservices, and a 100% free serverless web app deployed to Vercel.
+
+---
+
+### 🌐 Live Interactive Demo
+👉 **[profitlens-amexcampuschallenge2026.vercel.app](https://profitlens-amexcampuschallenge2026.vercel.app)**  
+*Experience the instant client-side prototype directly in your browser — zero download, zero server latency, testable on mobile and desktop.*
+
+---
+
+## 📸 Screenshots & UI Walkthrough
+
+| 1. Customer P&L Breakdown & Waterfall Chart |
+| :--- |
+| ![ProfitLens Customer 1 P&L Breakdown](assets/profitlens_customer_breakdown.png) |
+| *Interactive horizontal waterfall chart detailing positive revenue drivers ($355.52 discount interchange) versus negative operational cost drags (airline credits $-372.40, cab benefits $-145.00, digital servicing $-261.00).* |
+
+| 2. Formula Term-by-Term Explanation |
+| :--- |
+| ![ProfitLens Profitability Formula Explanation](assets/profitlens_formula_explanation.png) |
+| *Complete decomposition of the 10-term economic formula with exact coefficients, signs, and business logic derived via single-lever response-curve analysis.* |
 
 ---
 
@@ -27,22 +47,12 @@
 
 ---
 
-## 📸 Key Features & Capabilities
-
-ProfitLens provides an interactive chat interface over the scored 500,000-customer dataset:
-- **Instant Customer P&L Breakdowns**: Dynamic waterfall charts showing positive revenue (discount interchange, net interest) vs negative costs (airline credits, cab benefits, lounge, servicing, expected credit loss, collections).
-- **Segment Comparisons**: High-engagement vs standard portfolio analysis (e.g., lounge visits between top 20% and rest).
-- **Distribution Exploration**: Interactive histograms of profit distributions and key card features.
-- **Explainable Profitability**: Full term-by-term breakdown of the scoring formula with business logic.
-- **Multi-Round Function Calling**: Grounded in deterministic computation — the LLM never invents numbers.
-
----
-
 ## 🚀 Live Demo on Vercel (Free 1-Click Hosting)
 
-The `web/` directory contains an instant, interactive client-side application configured for **free deployment on Vercel**:
+The `web/` directory contains an instant, interactive client-side application hosted on Vercel:
+👉 **[profitlens-amexcampuschallenge2026.vercel.app](https://profitlens-amexcampuschallenge2026.vercel.app)**
 
-### How to deploy to Vercel for free:
+### How to deploy your own instance to Vercel for free:
 1. Push this repository to your GitHub: `https://github.com/kirat11X/Amex-Campus-Challenge`.
 2. Go to [Vercel Dashboard](https://vercel.com/new) and click **"Add New Project"** -> **"Import"** your GitHub repository.
 3. In the project setup:
@@ -51,7 +61,7 @@ The `web/` directory contains an instant, interactive client-side application co
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
 4. Click **Deploy**!
-5. In ~30 seconds, your live URL (`https://<project-name>.vercel.app`) is active.
+5. In ~30 seconds, your live URL is active.
 
 ### Live Hostable Modes:
 - **🟢 Instant Demo Mode (Default)**: Completely serverless & zero-download. Visitors on any device (phone, tablet, Safari, Chrome) can immediately click all sample prompts, inspect customer 1, customer 20, or type any customer ID (1–500,000) to see instant P&L breakdowns and interactive charts.
@@ -138,6 +148,9 @@ streamlit run app.py
 
 ```
 amex/
+├── assets/                                       # UI screenshots & visual assets
+│   ├── profitlens_customer_breakdown.png
+│   └── profitlens_formula_explanation.png
 ├── 6a3eb196bc7a3_campus_challenge_r1_data.csv    # Raw dataset (500K rows, f1-f23)
 ├── 6a3eb1af6b994_feature_description.csv         # Feature dictionary
 ├── 6a3ea743b1106_campus_challenge26_r1.pdf       # Challenge brief
